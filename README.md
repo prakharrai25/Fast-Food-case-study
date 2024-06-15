@@ -1,48 +1,67 @@
-# Fast-Food-case-study
-import numpy as np
 import pandas as pd
-from flexmix import flexmix, getModel
+import numpy as np
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
-from scipy.stats import multivariate_normal
 
-np.random.seed(1234)
+# Load data
 
-data = pd.read_csv("mcdonalds.csv")
+mcdonalds = pd.read_csv('/content/mcdonalds.csv')
 
-k_range = range(2, 9)
-n_reps = 10
+# Preprocess data
+MD_x = mcdonalds.iloc[:, 0:11]
+MD_x = (MD_x == "Yes").astype(int)
 
-MD_m28 = flexmix(formula="MD.x ~ 1", data=data, k=k_range, nrep=n_reps, model="FLXMCmvbinary", control=list(verbose=FALSE))
+# Compute column means
+col_means = np.round(MD_x.mean(), 2)
+print(col_means)
 
-print(MD_m28)
+# PCA
+MD_pca = PCA()
+MD_pca.fit(MD_x)
+MD_pca_summary = pd.DataFrame({
+    'Standard deviation': np.round(MD_pca.explained_variance_, 4),
+    'Proportion of Variance': np.round(MD_pca.explained_variance_ratio_, 4),
+    'Cumulative Proportion': np.round(np.cumsum(MD_pca.explained_variance_ratio_), 4)
+})
+print(MD_pca_summary)
 
-plt.plot(MD_m28)
-plt.ylabel("value of information criteria (AIC, BIC, ICL)")
+# Plot PCA
+plt.plot(MD_pca_summary.index + 1, MD_pca_summary['Proportion of Variance'], 'bo-')
+plt.xlabel('Principal Component')
+plt.ylabel('Proportion of Variance')
+plt.title('Importance of components')
 plt.show()
 
-MD_m4 = getModel(MD_m28, which="4")
+# K-means clustering
+kmeans = KMeans(n_clusters=4, random_state=1234)
+kmeans.fit(MD_x)
+MD_k4 = kmeans.labels_
 
-kmeans_clusters = flexmix_result_model["cluster"]
-mixture_clusters = MD_m4.predict()
+# Hierarchical clustering and plot
+MD_vclust = PCA().fit_transform(MD_x.T)
+MD_vclust_order = np.argsort(MD_vclust[:, 0])
+MD_barchart_order = np.flip(MD_vclust_order)
+plt.bar(np.arange(1, 5), MD_k4[MD_barchart_order], color='grey')
+plt.xlabel('Number of segments')
+plt.ylabel('Cluster Label')
+plt.show()
 
-contingency_table = pd.crosstab(index=kmeans_clusters, columns=mixture_clusters, rownames=["kmeans"], colnames=["mixture"])
+# PCA and clustering plot
+MD_pca_transformed = MD_pca.transform(MD_x)
+MD_pca_df = pd.DataFrame(MD_pca_transformed, columns=['PC1', 'PC2'])
+MD_pca_df['Cluster'] = MD_k4
 
-print(contingency_table)
+plt.scatter(MD_pca_df['PC1'], MD_pca_df['PC2'], c=MD_pca_df['Cluster'], cmap='viridis')
+plt.xlabel('Principal Component 1')
+plt.ylabel('Principal Component 2')
+plt.show()
 
+# Mosaic plot
+pd.crosstab(MD_k4, mcdonalds['Like']).plot(kind='bar', stacked=True, colormap='viridis')
+plt.xlabel('Segment number')
+plt.show()
 
-kmeans_clusters = flexmix_result_model["cluster"]
-
-MD_m4a = flexmix(formula="MD.x ~ 1", data=data, cluster=kmeans_clusters, model="FLXMCmvbinary")
-
-kmeans_clusters = flexmix_result_model["cluster"]
-mixture_clusters = MD_m4a.predict()
-
-contingency_table = pd.crosstab(index=kmeans_clusters, columns=mixture_clusters, rownames=["kmeans"], colnames=["mixture"])
-
-print(contingency_table)
-
-loglik_m4a = np.sum(np.log(np.sum(MD_m4a.weights * np.array([multivariate_normal.pdf(data, mean=mean, cov=cov, allow_singular=True) for mean, cov in zip(MD_m4a.params['mean'], MD_m4a.params['Sigma'])]), axis=1)))
-print(f"log Lik. {loglik_m4a:.3f} (df={MD_m4a.nparam})")
-
-loglik_m4 = np.sum(np.log(np.sum(MD_m4.weights * np.array([multivariate_normal.pdf(data, mean=mean, cov=cov, allow_singular=True) for mean, cov in zip(MD_m4.params['mean'], MD_m4.params['Sigma'])]), axis=1)))
-print(f"log Lik. {loglik_m4:.3f} (df={MD_m4.nparam})")
+pd.crosstab(MD_k4, mcdonalds['Gender']).plot(kind='bar', stacked=True, colormap='viridis')
+plt.xlabel('Segment number')
+plt.show()
